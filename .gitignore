@@ -1,0 +1,12 @@
+__pycache__/
+*.py[oc]
+.venv/
+.env
+models/
+logs/
+plots/
+data/train/
+data/val/
+data/test/
+*.pth
+*.json
