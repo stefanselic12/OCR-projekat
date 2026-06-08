@@ -1,208 +1,98 @@
-# OCR za automobilske tablice — Projektni zadatak iz Inteligentnih sistema
+## OCR Automobilskih tablica 
 
-## 1. Problem i cilj projekta
+## Tema 
 
-Cilj projekta je automatsko prepoznavanje teksta sa slika automobilskih tablica
-iz tri različita regiona: Srbije (SRB), Bosne i Hercegovine (BIH) i Evropske unije (EU).
-Zadatak spada u oblast optičkog prepoznavanja karaktera (OCR).
+Tema ovog projekta je prepoznavanje teksta sa automobilskih tablica korišćenjem CRNN (Convolutional Recurrent Neural Network) modela. Ulazni podaci modela su slike tablica (SRB, BIH i EU), dok na izlazu treba da dobijemo tekstualnu reprezentaciju registarske oznake. Projekat takođe istražuje uticaj različitih dekoder strategija (Greedy vs Beam Search) na tačnost prepoznavanja. 
 
-Problem je izazovan jer se formati tablica razlikuju:
-- Srpske tablice sadrže latinične i ćirilične oznake,
-- BIH tablice imaju karakterističan numeričko‑slovni format,
-- EU tablice imaju drugačiji raspored i ne sadrže ćirilicu.
+## Priprema podataka 
 
-## 2. Podaci (dataset)
+Pošto je prikupljanje velikog broja realnih slika tablica ograničavajući faktor, dataset je proširen sintetičkim generisanjem podataka. Na osnovu realnih primera tablica napravljen je generator koji: 
 
-### 2.1 Prikupljanje i struktura
+- Nasumično kombinuje slova (A-Ž, uključujući Č, Ć, Š, Ž) i brojeve (0-9) u skladu sa pravilima registarskih oznaka (dužina 5–10 karaktera) 
 
-Skup podataka je prikupljen samostalno, što odgovara zahtevima **Nivoa 3** projekta.
+- Generisani tekst se renderuje kao slika sa fontom sličnim tablicama 
 
-- Originalni skup: **100 slika** (50 iz Srbije + 50 iz Bosne i Hercegovine) i **41 slika** (EU tablice).
-- Svaka slika ima pripadajući `.txt` fajl sa tačnim tekstom tablice.
-- Pre obrade, crtice (`-`) su uklonjene iz labela radi uniformnosti.
-- Slike su fotografisane mobilnim telefonom u različitim uslovima osvetljenja i pod različitim uglovima.
+- Dodaju se blage deformacije, šum i varijacije u osvetljenju kako bi sintetičke slike ličile na realne uslove 
 
-**Podela podataka** (izvršena pre treninga):
+Na ovaj način je generisano 513 sintetičkih slika, koje su zajedno sa realnim snimcima (ukupno 654 slike) korišćene u dataset-u. Time je značajno smanjen rizik od overfittinga, a model je naučio da generalizuje na veći broj varijacija tekstova nego što bi to bilo moguće sa samo realnim podacima. 
 
-| Skup | Broj slika | Namena |
-|------|------------|--------|
-| Trening (`data/real/train`) | 80 (SRB+BIH) | Učenje modela |
-| Validacija (`data/real/val`) | 20 (SRB+BIH) | Praćenje generalizacije – model ih NIJE video tokom treninga |
-| Test (`data/real/test`) | 41 (EU) | Konačna evaluacija na potpuno novom formatu |
+Podela dataset-a na trening (393), validaciju (131) i test (130)  dok su sintetički podaci ravnomerno raspoređeni kroz sva tri skupa. 
 
-### 2.2 Ograničenja dataseta
+## Balansiranje 
 
-- Mali broj primera (svega 141 slika ukupno).
-- Neravnoteža između trening i test skupa — test čine isključivo EU tablice koje model nikada nije video tokom treniranja.
-- Ova postavka je namerno izabrana kako bi se testirala sposobnost **generalizacije** modela na novi, neviđeni format.
+Balansiranje karaktera: Analizom realnih podataka uočen je disbalans među slovima (npr. slovo Z se javljalo mnogo češće od slova Č). Primenjena je strategija fokusiranja samo na retka slova. 
 
-## 3. Istraživanje arhitektura i izbor rešenja
+- Cilj je postignut kada svaki karakter ima najmanje 50 pojavljivanja. 
 
-### 3.1 Pokušani pristupi
+- Za svaki karakter koji nije dostigao cilj, generisane su sintetičke tablice. 
 
-Prvobitno je implementirana **CRNN (Convolutional Recurrent Neural Network)** arhitektura
-sa CTC (Connectionist Temporal Classification) gubitkom, što je standardni pristup za OCR.
-Međutim, CRNN je zahtevao veliku količinu podataka (10.000+) da bi postigao zadovoljavajuće
-rezultate. Sa samo 100 trening slika, model nije uspevao da uči — tačnost je ostajala 0%.
+- Na ovaj način, odnos max/min među karakterima je smanjen sa preko 10x na manje od 3x. 
 
-### 3.2 Konačno rešenje: TrOCR
+## Model 
 
-Kao alternativa izabran je **Microsoft TrOCR (Transformer-based Optical Character Recognition)**,
-model `trocr-base-printed`, koji je već istreniran na ogromnom skupu štampanog teksta.
-TrOCR kombinuje Vision Transformer (ViT) enkoder i GPT-2 dekoder, i pogodan je za
-**fine‑tuning** na malim, specifičnim skupovima podataka.
+Model korišćen u ovom projektu je CRNN (Convolutional Recurrent Neural Network), izabran je zato što je standardni pristup za prepoznavanje teksta na slikama koji 
 
-Prednosti TrOCR‑a za ovaj projekat:
-- Radi dobro sa malo podataka (zahvaljujući pre‑treniranom znanju),
-- Lako se prilagođava novim fontovima i formatima,
-- Jednostavna implementacija kroz Hugging Face biblioteke.
+Stefan Selić, Luka Sikimić - FTN 
 
-### 3.3 Fine‑tuning kao sopstveni trening (Transfer Learning)
+kombinuje prednosti CNN-a za izdvajanje prostornih karakteristika i RNN-a za modelovanje sekvencijalne prirode teksta. 
 
-Korišćenje pre‑treniranog modela nije „gotovo rešenje“ – sproveden je **sopstveni trening**
-na **našem datasetu**. Ovaj proces se naziva **transfer learning** ili **fine‑tuning** i
-podrazumeva sledeće:
+Delovi modela su: 
 
-1. Model je inicijalizovan težinama koje je Microsoft dobio treniranjem na opštem štampanom tekstu.
-2. Zatim je **nastavljen trening** na naših 80 slika automobilskih tablica (SRB+BIH).
-3. Tokom 20 epoha, model je prilagođavao svoje težine specifičnim fontovima, rasporedu karaktera i prisustvu ćirilice.
-4. Pre treninga, model **nije umeo** da prepozna tekst sa naših tablica. Nakon treninga, postigao je **55% tačnost** na validacionom skupu (slike koje nije video).
+- CNN (Convolutional Neural Network) – ekstrahuje prostorne karakteristike sa slike. Konvolucioni slojevi smanjuju prostorne dimenzije dok povećavaju broj kanala, izlaz je feature map dimenzija 256×4×64 → 1024×64. 
 
-Ovo je u potpunosti u skladu sa zahtevima **Nivoa 3** projektnog zadatka, jer:
-- Model je **treniran** (nije samo pokrenut gotov),
-- **Loss je praćen** kroz epohe,
-- **Težine su menjane** na osnovu našeg dataseta,
-- **Sopstveni dataset** je prikupljen, označen i pripremljen.
+- RNN (Recurrent Neural Network) – obrađuje sekvence karakteristika koje dolaze iz CNN-a. U ovom projektu korišćen je dvosmerni LSTM (Bidirectional LSTM) koji može da "vidi" kontekst sa obe strane. 
 
-Transfer learning je standardna i preporučena praksa u oblasti dubokog učenja,
-posebno kada radimo sa malim skupovima podataka kao što je naš.
+- CTC (Connectionist Temporal Classification) – omogućava modelu da uči bez preciznog poravnanja između ulazne slike i izlaznog teksta. CTC se koristi prilikom treninga, dok se u inferenci koriste dekoderi (Greedy ili Beam Search). 
 
-## 4. Trening modela
+Ukupan broj parametara modela je 3,560,679. 
 
-### 4.1 Parametri treninga
+## Dekoderi 
 
-| Parametar | Vrednost |
-|-----------|----------|
-| Model | `microsoft/trocr-base-printed` |
-| Broj epoha | 20 |
-| Veličina batch‑a | 2 |
-| Stopa učenja | 5e-5 (sa linearnim opadanjem) |
-| Optimizator | AdamW |
-| Hardver | CPU (AMD Ryzen 7 5000) |
-| Ukupno koraka | 800 |
+Projekat poredi dve strategije za dekodiranje CTC izlaza: 
 
-### 4.2 Proces treninga
+Greedy dekoder 
 
-Trening je izvršen lokalno na računaru (CPU) uz pomoć Hugging Face biblioteka.
-Korišćen je `Seq2SeqTrainer` sa sledećim podešavanjima:
-- Bez među‑evaluacije tokom treninga (da bi se izbegli tehnički problemi sa `compute_metrics` na CPU‑u),
-- Gubitak je Cross‑Entropy, gde su `<pad>` tokeni maskirani,
-- Ručna evaluacija na validacionom skupu je izvršena odmah nakon treninga.
+- Na svakom vremenskom koraku bira karakter sa najvećom verovatnoćom 
 
-### 4.3 Tok gubitka (Loss)
+- Zatim spaja duplikate i uklanja blank znakove 
 
-| Korak | Training Loss |
-|-------|---------------|
-| 10 | 12.14 |
-| 50 | 1.61 |
-| 100 | 0.69 |
-| 200 | 0.23 |
-| 400 | 0.0002 |
-| 800 | 0.0001 |
+- Jednostavan i brz 
 
-Loss je rapidno opao sa početnih 12.14 na manje od 0.001, što pokazuje da je model
-uspešno naučio obrasce iz trening skupa.
+Beam Search dekoder 
 
-## 5. Rezultati evaluacije
+- Održava više najverovatnijih pretpostavki (beam width = 7 i 10) 
 
-Za evaluaciju su korišćene dve metrike:
-- **Character Error Rate (CER)** — prosečan broj pogrešnih karaktera (Levenshtein distance / dužina reference),
-- **Tačnost cele tablice (Word Accuracy)** — procenat potpuno tačno prepoznatih tablica.
+- Na kraju bira pretpostavku sa najvećom ukupnom verovatnoćom 
 
-### 5.1 Rezultati po skupovima
+- Složeniji, ali teoretski može dati bolje rezultate za duže sekvence 
 
-| Skup | Broj slika | CER | Tačnost cele tablice |
-|------|------------|-----|----------------------|
-| SRB + BIH (validacija) | 20 | 0.146 | **55.0%** |
-| EU tablice (test) | 41 | 0.517 | **0.0%** |
+Zaključak analize je da, uz trenutni obim dataset-a i nivo istreniranosti, Greedy dekoder predstavlja optimalno rešenje koje minimizuje šum i greške u predikciji. 
 
-### 5.2 Primeri uspešnih i neuspešnih predikcija
+Stefan Selić, Luka Sikimić - FTN 
 
-**Uspešno (SRB/BIH validacija):** 11 od 20 tablica tačno prepoznato (npr. `CK964GE`, `VAВА224UL`).
+Analiza izazova i poteškoća 
 
-**Neuspešno (SRB/BIH validacija) — tipični primeri:**
+Tokom procesa razvoja identifikovano je više kjučnih izazova koja su direktno uticala na performanse sistema: 
 
-| Predviđeno | Tačno | Uočena greška |
-|------------|-------|---------------|
-| `E86O223` | `E86O723` | Zamena 0↔7 |
-| `UEJ61T975` | `J67T975` | Višak slova na početku |
-| `VRВР147Z` | `VRВР147ZC` | Nedostaje poslednji karakter |
+- Disbalans karaktera: Pojedini karakteri su bili zastupljeni u znatno manjoj meri, što je rešeno ciljanim generisanjem sintetičkih uzoraka radi postizanja ravnomerne distribucije. 
 
-**Neuspešno (EU test) — tipični primeri:**
+- Kvalitet sintetičkih slika: Inicijalni pokušaji su ukazali na preveliku uniformnost sintetičkih slika, što je prevaziđeno uvođenjem šuma i varijacija u fontovima kako bi se simulirali realni uslovi. 
 
-| Predviđeno | Tačno | Uočena greška |
-|------------|-------|---------------|
-| `VUВУ125FB` | `VU125FB` | Ubacivanje ćiriličnog para `ВУ` |
-| `BMБМ132CD` | `BM132CD` | Ubacivanje ćiriličnog para `БМ` |
-| `BT832Б842` | `BT81342` | Ubacivanje ćirilice i promena brojeva |
-| `MBНБ515EFEFEF` | `MB51EFJ` | Ubacivanje ćirilice i dupliranje sufiksa |
+- Nepogodni uglovi snimanja: Sistem koristi dva načina da tablicu pročita pravilno, čak i kada kamera nije postavljena idealno: 
 
-## 6. Analiza grešaka i diskusija
+   1. **Automatsko ispravljanje (Pretprocesiranje):** Pre nego što slika stigne do modela, OpenCV kod pronalazi ivice tablice i automatski je rotira tako da stoji vodoravno. Ovim se dobija "čista" slika, a zahvaljujući kvalitetnoj obradi (Lanczos interpolacija), karakteri ostaju oštri i jasni. 
 
-### 6.1 Overfitting na trening domen
+   2. **Trening na iskrivljenim slikama (Augmentacija):** Pošto se slika ponekad vidi pod uglom (kao trapez), sistem je naučen da prepoznaje i takve oblike. Tokom treninga, modelu namerno pokazujemo puno slika koje su veštački iskrivljene. Tako model "vežba" i uči da prepozna slova i brojeve bez obzira na to da li je slika savršeno ravna ili blago nagnuta. 
 
-Model je postigao solidnih 55% tačnosti na SRB/BIH validacionom skupu, što pokazuje
-da je zaista naučio osnovne obrasce formata tablica na kojima je treniran.
-Međutim, na EU tablicama pravi sistematske greške — **ubacuje ćirilične karaktere**
-odmah iza latiničnih parova.
+- Sistemski problemi _Beam Search_ dekodera: Uočeno je da Beam Search ima tendenciju ka **skraćivanju sekvenci (omission errors)** , posebno kod dužih stringova ili u uslovima vizuelne nesigurnosti. Ovo ukazuje na to da algoritam favorizuje kraće putanje sa manjim brojem "blank" karaktera, što dovodi do gubitka informacija. ( `PB9880HE -> PB980HE -` Izostavljen karakter _8_ ) 
 
-Ovo se objašnjava strukturom srpskih tablica koje su dominirale u trening skupu:
-svaka srpska tablica sadrži dve latinične oznake grada nakon kojih slede **iste te
-oznake napisane ćirilicom** (npr. `BG` → `BGБГ`). Model je "naučio" da iza latiničnog
-para uvek dolazi njegov ćirilični par.
+- Vizuelne konfuzije modela (OCR karakteristike): Neke greške se ponavljaju nezavisno od dekodera, što ukazuje na to da sam **CRNN model** teško pravi distinkciju između određenih vizuelno sličnih karaktera. (H/L, 0/O, Š/S, I/1/7...) 
 
-EU tablice nemaju ćiriličke znakove, pa model "halucinira" njihovo prisustvo.
-CER od 0.517 na EU skupu znači da model u proseku pogreši **svaki drugi karakter**.
+Stefan Selić, Luka Sikimić - FTN 
 
-### 6.2 Ostale vrste grešaka
+## Zaključak 
 
-Na validacionom skupu (SRB/BIH):
-- **Zamena sličnih karaktera** (`0` ↔ `7`, `D` ↔ `U`, `F` ↔ `E`),
-- **Nedostajući ili višak karaktera** na početku/kraju tablice.
+Razvijeni sistem uspešno demonstrira robusno prepoznavanje registarskih tablica, koristeći napredne metode geometrijske normalizacije i augmentacije za prevazilaženje izazova u realnim uslovima eksploatacije. Postignuta preciznost potvrđuje da integracija pretprocesiranja slike sa CRNN arhitekturom omogućava pouzdan rad sistema čak i pri varijacijama u osvetljenju i uglovima snimanja. Ovako koncipirano rešenje predstavlja čvrstu osnovu za implementaciju u produkcionim sistemima za automatizovanu kontrolu pristupa i nadzor. 
 
-Na EU test skupu:
-- **Dupliranje sufiksa** (`EF` → `EFEFEF`, `408` → `408408`),
-- **Pogrešno prepoznavanje prefiksa** (`RBM` → `RPB`).
+Stefan Selić, Luka Sikimić - FTN 
 
-Sve ove greške su posledica malog trening skupa i preprilagođavanja modela specifičnom formatu trening tablica.
-
-### 6.3 Ograničenja eksperimenta
-
-- Trening skup je mali (80 slika) i neuravnotežen (samo SRB i BIH),
-- Test skup (EU) nije bio zastupljen u treningu, što je dovelo do drastičnog pada tačnosti,
-- Nije korišćena obimnija data augmentacija koja bi simulirala EU format.
-
-## 7. Zaključak i moguća unapređenja
-
-Ovaj projekat je pokazao da se fine‑tuningom velikog pre‑treniranog modela (TrOCR)
-može postići **zadovoljavajuća tačnost** na malom, specijalizovanom skupu podataka (SRB/BIH tablice),
-čak i kada se trenira na skromnom hardveru (CPU).
-
-Takođe je jasno demonstrirano ključno ograničenje ovakvog pristupa — **loša generalizacija**
-na neviđene formate (EU tablice), što je posledica overfitting‑a na specifičnu strukturu
-trening podataka.
-
-### Moguća unapređenja
-
-1. **Proširenje dataseta** — dodati barem 20–30 EU tablica u trening skup,
-2. **Data augmentacija** — dodati transformacije koje uklanjaju plavu traku sa EU tablica,
-3. **Balansirani trening** — osigurati podjednaku zastupljenost sva tri regiona,
-4. **Sintetički podaci** — generisati veštačke EU tablice bez ćirilice za trening,
-5. **Više epoha** — nastaviti trening sa manjom stopom učenja radi stabilnije konvergencije.
-
-## 8. Izvori
-
-1. Microsoft TrOCR: [https://huggingface.co/microsoft/trocr-base-printed](https://huggingface.co/microsoft/trocr-base-printed)
-2. Hugging Face Transformers biblioteka: [https://github.com/huggingface/transformers](https://github.com/huggingface/transformers)
-3. Python biblioteke: PyTorch, Datasets, Accelerate, Pillow, Levenshtein, evaluate
-4. Svi izvorni kodovi i podaci su dostupni u GitHub repozitorijumu ovog projekta.v
