@@ -1,19 +1,18 @@
-# CRNN OCR za tablice
+OCR Projekat - Prepoznavanje registarskih tablica
+Ovaj projekat služi za automatsko čitanje teksta sa registarskih tablica vozila koristeći OCR (Optical Character Recognition) tehnologiju.
 
-## Instalacija
+Šta projekat radi?
+Detektuje tablice na slikama.
 
-```bash
-# 1. Kreiraj virtualno okruženje
-python -m venv .venv
+Ispravlja perspektivu (ako je slika slikana pod uglom).
 
-# 2. Aktiviraj ga
-# Windows:
-.venv\Scripts\activate
-# Linux/Mac:
-source .venv/bin/activate
+Prepoznaje karaktere koristeći obučeni model.
 
-# 3. Instaliraj PyTorch za CUDA (GPU)
-pip install torch torchvision --index-url https://download.pytorch.org/whl/cu118
+Struktura
+data/ - Folder sa slikama za trening i testiranje.
 
-# 4. Instaliraj ostale biblioteke
-pip install -r requirements.txt
+src/ - Izvorni kod za procesiranje slika i model.
+
+main.py - Glavni fajl za pokretanje prepoznavanja.
+
+dokumentacija.md - Detaljan opis metodologije i rezultata.
