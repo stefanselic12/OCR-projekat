@@ -32,8 +32,6 @@ Balansiranje karaktera: Analizom realnih podataka uočen je disbalans među slov
 
 Model korišćen u ovom projektu je CRNN (Convolutional Recurrent Neural Network), izabran je zato što je standardni pristup za prepoznavanje teksta na slikama koji 
 
-Stefan Selić, Luka Sikimić - FTN 
-
 kombinuje prednosti CNN-a za izdvajanje prostornih karakteristika i RNN-a za modelovanje sekvencijalne prirode teksta. 
 
 Delovi modela su: 
@@ -68,8 +66,6 @@ Beam Search dekoder
 
 Zaključak analize je da, uz trenutni obim dataset-a i nivo istreniranosti, Greedy dekoder predstavlja optimalno rešenje koje minimizuje šum i greške u predikciji. 
 
-Stefan Selić, Luka Sikimić - FTN 
-
 Analiza izazova i poteškoća 
 
 Tokom procesa razvoja identifikovano je više kjučnih izazova koja su direktno uticala na performanse sistema: 
@@ -88,7 +84,6 @@ Tokom procesa razvoja identifikovano je više kjučnih izazova koja su direktno 
 
 - Vizuelne konfuzije modela (OCR karakteristike): Neke greške se ponavljaju nezavisno od dekodera, što ukazuje na to da sam **CRNN model** teško pravi distinkciju između određenih vizuelno sličnih karaktera. (H/L, 0/O, Š/S, I/1/7...) 
 
-Stefan Selić, Luka Sikimić - FTN 
 
 ## Zaključak 
 
